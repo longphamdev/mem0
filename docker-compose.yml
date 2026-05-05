@@ -1,66 +1,48 @@
 services:
   mem0_store:
     image: qdrant/qdrant:v1.13.0
+    network_mode: "host"
     ports:
-      - "6335:6333"
+      - "6333:6333" # Qdrant GRPC
+      - "6334:6334" # Qdrant HTTP
     volumes:
       - ./mem0_store/storage:/qdrant/storage
     environment:
       - GID=0
       - UID=0
     restart: unless-stopped
-    networks:
-      - openmemory-net
 
   openmemory-mcp:
     build:
       context: ./openmemory/api
       dockerfile: Dockerfile
+    network_mode: "host"
     ports:
       - "8765:8765"
-    dns:
-      - 8.8.8.8
-      - 8.8.4.4
     environment:
       - GID=0
       - UID=0
       - USER=root
-      - QDRANT_HOST=mem0_store
+      - QDRANT_HOST=localhost
       - QDRANT_PORT=6333
       # LLM
-      - LLM_PROVIDER=openai
-      - LLM_MODEL=MiniMax-M2
-      - OPENAI_API_KEY=longphamdev
-      - OPENAI_BASE_URL=http://192.168.2.51:8317/v1
-      # Embedder
-      - EMBEDDER_PROVIDER=ollama
-      - EMBEDDER_MODEL=nomic-embed-text
-      - OLLAMA_BASE_URL=http://192.168.2.10:11434
-      - EMBEDDING_MODEL_DIMS=768
-      # Force default config từ env
-      - MEM0_LLM_PROVIDER=openai-compatible
-      - MEM0_LLM_MODEL=MiniMax-M2.7
-      - MEM0_EMBEDDER_PROVIDER=ollama
-      - MEM0_EMBEDDER_MODEL=nomic-embed-text
-    depends_on:
-      - mem0_store
+      - CHAT_LLM_PROVIDER=openai-compatible
+      - CHAT_LLM_MODEL=MiniMax-M2.7
+      - CHAT_LLM_API_KEY=longphamdev
+      - CHAT_LLM_BASE_URL=http://192.168.2.51:8317/v1
+      # Embedded
+      - EMBEDDED_PROVIDER=ollama
+      - EMBEDDED_MODEL=nomic-embed-text
+      - EMBEDDED_BASE_URL=http://192.168.2.10:11434
+      - EMBEDDED_MODEL_DIMS=768
     restart: unless-stopped
-    networks:
-      - openmemory-net
 
   openmemory-ui:
     image: mem0/openmemory-ui:latest
+    network_mode: "host"
     ports:
-      - "3000:3000"
+      - "3000:3000" # Next.js UI
     environment:
-      - NEXT_PUBLIC_API_URL=http://openmemory-mcp:8765
+      - NEXT_PUBLIC_API_URL=http://localhost:8765
       - NEXT_PUBLIC_USER_ID=${USER:-long}
-    depends_on:
-      - openmemory-mcp
     restart: unless-stopped
-    networks:
-      - openmemory-net
-
-networks:
-  openmemory-net:
-    driver: bridge

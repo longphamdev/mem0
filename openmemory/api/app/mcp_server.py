@@ -432,6 +432,138 @@ async def delete_all_memories() -> str:
         return f"Error deleting memories: {e}"
 
 
+@mcp.tool(description="Get a specific memory by its ID")
+async def get_memory(memory_id: str) -> str:
+    uid = user_id_var.get(None)
+    client_name = client_name_var.get(None)
+    if not uid:
+        return "Error: user_id not provided"
+    if not client_name:
+        return "Error: client_name not provided"
+
+    # Get memory client safely
+    memory_client = get_memory_client_safe()
+    if not memory_client:
+        return "Error: Memory system is currently unavailable. Please try again later."
+
+    try:
+        db = SessionLocal()
+        try:
+            # Get or create user and app
+            user, app = get_user_and_app(db, user_id=uid, app_id=client_name)
+
+            # Convert and validate memory ID
+            memory_uuid = uuid.UUID(memory_id)
+
+            # Get memory and check permissions
+            memory = db.query(Memory).filter(Memory.id == memory_uuid).first()
+            if not memory:
+                return f"Error: Memory {memory_id} not found"
+
+            if not check_memory_access_permissions(db, memory, app.id):
+                return f"Error: Access denied to memory {memory_id}"
+
+            # Create access log entry
+            access_log = MemoryAccessLog(
+                memory_id=memory_uuid,
+                app_id=app.id,
+                access_type="get",
+                metadata_={"hash": memory.metadata_.get("hash") if memory.metadata_ else None}
+            )
+            db.add(access_log)
+            db.commit()
+
+            # Return memory data
+            result = {
+                "id": str(memory.id),
+                "memory": memory.content,
+                "hash": memory.metadata_.get("hash") if memory.metadata_ else None,
+                "created_at": memory.created_at.isoformat() if memory.created_at else None,
+                "updated_at": memory.updated_at.isoformat() if memory.updated_at else None,
+                "state": memory.state.value if memory.state else None,
+            }
+            return json.dumps(result, indent=2)
+        finally:
+            db.close()
+    except ValueError:
+        return f"Error: Invalid memory ID format: {memory_id}"
+    except Exception as e:
+        logging.exception(f"Error getting memory: {e}")
+        return f"Error getting memory: {e}"
+
+
+@mcp.tool(description="Update a specific memory with new content")
+async def update_memory(memory_id: str, text: str) -> str:
+    uid = user_id_var.get(None)
+    client_name = client_name_var.get(None)
+    if not uid:
+        return "Error: user_id not provided"
+    if not client_name:
+        return "Error: client_name not provided"
+
+    # Get memory client safely
+    memory_client = get_memory_client_safe()
+    if not memory_client:
+        return "Error: Memory system is currently unavailable. Please try again later."
+
+    try:
+        db = SessionLocal()
+        try:
+            # Get or create user and app
+            user, app = get_user_and_app(db, user_id=uid, app_id=client_name)
+
+            # Convert and validate memory ID
+            memory_uuid = uuid.UUID(memory_id)
+
+            # Get memory and check permissions
+            memory = db.query(Memory).filter(Memory.id == memory_uuid).first()
+            if not memory:
+                return f"Error: Memory {memory_id} not found"
+
+            if not check_memory_access_permissions(db, memory, app.id):
+                return f"Error: Access denied to memory {memory_id}"
+
+            old_content = memory.content
+
+            # Update in vector store first
+            try:
+                memory_client.update(memory_id, text)
+            except Exception as update_error:
+                logging.warning(f"Failed to update memory {memory_id} in vector store: {update_error}")
+
+            # Update in database
+            memory.content = text
+            memory.updated_at = datetime.datetime.now(datetime.UTC)
+
+            # Create history entry
+            history = MemoryStatusHistory(
+                memory_id=memory_uuid,
+                changed_by=user.id,
+                old_state=memory.state,
+                new_state=memory.state
+            )
+            db.add(history)
+
+            # Create access log entry
+            access_log = MemoryAccessLog(
+                memory_id=memory_uuid,
+                app_id=app.id,
+                access_type="update",
+                metadata_={"old_content": old_content, "new_content": text}
+            )
+            db.add(access_log)
+            db.commit()
+
+            return json.dumps({"id": memory_id, "memory": text, "updated": True}, indent=2)
+        finally:
+            db.close()
+    except ValueError:
+        return f"Error: Invalid memory ID format: {memory_id}"
+    except Exception as e:
+        logging.exception(f"Error updating memory: {e}")
+        return f"Error updating memory: {e}"
+
+
 @mcp_router.get("/{client_name}/sse/{user_id}")
 async def handle_sse(request: Request):
     """Handle SSE connections for a specific user and client"""

@@ -224,6 +224,48 @@ def _create_embedder_config(provider, model, api_key, base_url, ollama_base_url,
     return config
 
 
+def _get_env_with_chat_prefix(var_name):
+    """Get environment variable, checking CHAT_ prefix variant first for LLM/embedder vars.
+
+    The docker-compose.yml uses CHAT_LLM_PROVIDER, CHAT_LLM_MODEL, CHAT_LLM_BASE_URL,
+    and EMBEDDED_PROVIDER, EMBEDDED_MODEL, EMBEDDED_BASE_URL. This function maps
+    those to the expected LLM_*/EMBEDDER_* names.
+    """
+    # Map of chat-prefixed vars to their standard names
+    chat_map = {
+        'LLM_PROVIDER': 'CHAT_LLM_PROVIDER',
+        'LLM_MODEL': 'CHAT_LLM_MODEL',
+        'LLM_API_KEY': 'CHAT_LLM_API_KEY',
+        'LLM_BASE_URL': 'CHAT_LLM_BASE_URL',
+        'EMBEDDER_PROVIDER': 'EMBEDDED_PROVIDER',
+        'EMBEDDER_MODEL': 'EMBEDDED_MODEL',
+        'EMBEDDER_API_KEY': 'EMBEDDED_API_KEY',
+        'EMBEDDER_BASE_URL': 'EMBEDDED_BASE_URL',
+        'OLLAMA_BASE_URL': 'CHAT_OLLAMA_BASE_URL',
+    }
+    # Check standard name first, then chat prefix
+    standard_val = os.environ.get(var_name)
+    chat_name = chat_map.get(var_name)
+    chat_val = os.environ.get(chat_name) if chat_name else None
+    return standard_val or chat_val
+
+
+def _extract_provider_variant(provider_value):
+    """Extract base provider from values like 'openai-compatible'.
+
+    The CHAT_LLM_PROVIDER=openai-compatible means use openai-compatible
+    variant. The first part before hyphen is the base provider (openai).
+    Returns 'openai' as the base provider.
+    """
+    if not provider_value:
+        return None
+    # If provider contains a hyphen, extract the first part as base provider
+    if '-' in provider_value:
+        parts = provider_value.split('-', 1)
+        return parts[0].lower()
+    return provider_value.lower()
+
+
 def get_default_memory_config():
     """Get default memory client configuration with sensible defaults."""
     # Detect vector store based on environment variables
@@ -231,7 +273,7 @@ def get_default_memory_config():
         "collection_name": "openmemory",
         "host": "mem0_store",
     }
-    
+
     # Check for different vector store configurations based on environment variables
     if os.environ.get('CHROMA_HOST') and os.environ.get('CHROMA_PORT'):
         vector_store_provider = "chroma"
@@ -280,7 +322,7 @@ def get_default_memory_config():
         milvus_host = os.environ.get('MILVUS_HOST')
         milvus_port = int(os.environ.get('MILVUS_PORT'))
         milvus_url = f"http://{milvus_host}:{milvus_port}"
-        
+
         vector_store_config = {
             "collection_name": "openmemory",
             "url": milvus_url,
@@ -296,7 +338,7 @@ def get_default_memory_config():
         elasticsearch_port = int(os.environ.get('ELASTICSEARCH_PORT'))
         # Use http:// scheme since we're not using SSL
         full_host = f"http://{elasticsearch_host}"
-        
+
         vector_store_config.update({
             "host": full_host,
             "port": elasticsearch_port,
@@ -328,15 +370,16 @@ def get_default_memory_config():
             "port": 6333,
             "embedding_model_dims": embedding_dims,
         })
-    
+
     print(f"Auto-detected vector store: {vector_store_provider} with config: {vector_store_config}")
 
-    # Detect LLM provider from environment variables
-    llm_provider = os.environ.get('LLM_PROVIDER', 'openai').lower()
-    llm_model = os.environ.get('LLM_MODEL')
-    llm_api_key = os.environ.get('LLM_API_KEY')
-    llm_base_url = os.environ.get('LLM_BASE_URL')
-    ollama_base_url = os.environ.get('OLLAMA_BASE_URL')
+    # Detect LLM provider from environment variables (check CHAT_ prefix first)
+    raw_llm_provider = _get_env_with_chat_prefix('LLM_PROVIDER') or 'openai'
+    llm_provider = _extract_provider_variant(raw_llm_provider)
+    llm_model = _get_env_with_chat_prefix('LLM_MODEL')
+    llm_api_key = _get_env_with_chat_prefix('LLM_API_KEY')
+    llm_base_url = _get_env_with_chat_prefix('LLM_BASE_URL')
+    ollama_base_url = _get_env_with_chat_prefix('OLLAMA_BASE_URL')
 
     llm_config = _create_llm_config(
         provider=llm_provider,
@@ -348,10 +391,12 @@ def get_default_memory_config():
     print(f"Auto-detected LLM provider: {llm_provider}")
 
     # Detect embedder provider from environment variables
-    embedder_provider = os.environ.get('EMBEDDER_PROVIDER', llm_provider if llm_provider == 'ollama' else 'openai').lower()
-    embedder_model = os.environ.get('EMBEDDER_MODEL')
-    embedder_api_key = os.environ.get('EMBEDDER_API_KEY')
-    embedder_base_url = os.environ.get('EMBEDDER_BASE_URL')
+    # Detect embedder provider from environment variables (check EMBEDDED_ prefix first)
+    embedder_provider = _get_env_with_chat_prefix('EMBEDDER_PROVIDER') or (llm_provider if llm_provider == 'ollama' else 'openai')
+    embedder_provider = _extract_provider_variant(embedder_provider)
+    embedder_model = _get_env_with_chat_prefix('EMBEDDER_MODEL')
+    embedder_api_key = _get_env_with_chat_prefix('EMBEDDER_API_KEY')
+    embedder_base_url = _get_env_with_chat_prefix('EMBEDDER_BASE_URL')
 
     embedder_config = _create_embedder_config(
         provider=embedder_provider,

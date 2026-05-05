@@ -1,0 +1,12 @@
+{
+  "name": "mem0-openmemory",
+  "version": "0.1.0",
+  "description": "Self-hosted Mem0 memory layer for AI agents. Provides persistent memory via local MCP server (Qdrant + Ollama). No external API required — all data stays on your infrastructure.",
+  "author": {
+    "name": "longphamdev",
+    "email": "longpham16072001@gmail.com"
+  },
+  "repository": "https://github.com/longphamdev/mem0",
+  "license": "Apache-2.0",
+  "keywords": ["memory", "self-hosted", "openmemory", "mcp", "qdrant", "ollama"]
+}

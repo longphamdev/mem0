@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "mem0": {
+      "type": "http",
+      "url": "${env:MCP_PROTOCOL:-http}://${env:MCP_HOST:-localhost}:${env:MCP_PORT:-8765}/mcp/${env:MEM0_USER_ID:-default}/http/plugin"
+    }
+  }
+}
