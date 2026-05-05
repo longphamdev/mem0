@@ -5,7 +5,8 @@ LABEL org.opencontainers.image.name="mem0/openmemory-mcp"
 WORKDIR /usr/src/openmemory
 
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+COPY pip_packages /pip_packages
+RUN pip install --no-cache-dir --no-index --find-links=/pip_packages -r requirements.txt
 
 COPY config.json .
 COPY . .

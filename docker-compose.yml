@@ -1,0 +1,66 @@
+services:
+  mem0_store:
+    image: qdrant/qdrant:v1.13.0
+    ports:
+      - "6335:6333"
+    volumes:
+      - ./mem0_store/storage:/qdrant/storage
+    environment:
+      - GID=0
+      - UID=0
+    restart: unless-stopped
+    networks:
+      - openmemory-net
+
+  openmemory-mcp:
+    build:
+      context: ./openmemory/api
+      dockerfile: Dockerfile
+    ports:
+      - "8765:8765"
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    environment:
+      - GID=0
+      - UID=0
+      - USER=root
+      - QDRANT_HOST=mem0_store
+      - QDRANT_PORT=6333
+      # LLM
+      - LLM_PROVIDER=openai
+      - LLM_MODEL=MiniMax-M2
+      - OPENAI_API_KEY=longphamdev
+      - OPENAI_BASE_URL=http://192.168.2.51:8317/v1
+      # Embedder
+      - EMBEDDER_PROVIDER=ollama
+      - EMBEDDER_MODEL=nomic-embed-text
+      - OLLAMA_BASE_URL=http://192.168.2.10:11434
+      - EMBEDDING_MODEL_DIMS=768
+      # Force default config từ env
+      - MEM0_LLM_PROVIDER=openai-compatible
+      - MEM0_LLM_MODEL=MiniMax-M2.7
+      - MEM0_EMBEDDER_PROVIDER=ollama
+      - MEM0_EMBEDDER_MODEL=nomic-embed-text
+    depends_on:
+      - mem0_store
+    restart: unless-stopped
+    networks:
+      - openmemory-net
+
+  openmemory-ui:
+    image: mem0/openmemory-ui:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://openmemory-mcp:8765
+      - NEXT_PUBLIC_USER_ID=${USER:-long}
+    depends_on:
+      - openmemory-mcp
+    restart: unless-stopped
+    networks:
+      - openmemory-net
+
+networks:
+  openmemory-net:
+    driver: bridge

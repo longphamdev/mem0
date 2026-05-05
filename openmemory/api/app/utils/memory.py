@@ -241,9 +241,11 @@ def get_default_memory_config():
         })
     elif os.environ.get('QDRANT_HOST') and os.environ.get('QDRANT_PORT'):
         vector_store_provider = "qdrant"
+        embedding_dims = int(os.environ.get('EMBEDDING_MODEL_DIMS', 768))
         vector_store_config.update({
             "host": os.environ.get('QDRANT_HOST'),
-            "port": int(os.environ.get('QDRANT_PORT'))
+            "port": int(os.environ.get('QDRANT_PORT')),
+            "embedding_model_dims": embedding_dims,
         })
     elif os.environ.get('WEAVIATE_CLUSTER_URL') or (os.environ.get('WEAVIATE_HOST') and os.environ.get('WEAVIATE_PORT')):
         vector_store_provider = "weaviate"
@@ -321,8 +323,10 @@ def get_default_memory_config():
     else:
         # Default fallback to Qdrant
         vector_store_provider = "qdrant"
+        embedding_dims = int(os.environ.get('EMBEDDING_MODEL_DIMS', 768))
         vector_store_config.update({
             "port": 6333,
+            "embedding_model_dims": embedding_dims,
         })
     
     print(f"Auto-detected vector store: {vector_store_provider} with config: {vector_store_config}")
